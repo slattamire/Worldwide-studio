@@ -26,13 +26,30 @@ function clipsPath(code) {
 }
 
 function loadClips(code) {
+  const dir = projectDir(code);
   const file = clipsPath(code);
-  if (!fs.existsSync(file)) return [];
+
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  if (!fs.existsSync(file)) {
+    fs.writeFileSync(file, JSON.stringify([], null, 2));
+    return [];
+  }
+
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
 function saveClips(code, clips) {
-  fs.writeFileSync(file = clipsPath(code), JSON.stringify(clips, null, 2));
+  const dir = projectDir(code);
+  const file = clipsPath(code);
+
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  fs.writeFileSync(file, JSON.stringify(clips, null, 2));
 }
 
 function safeName(name) {
