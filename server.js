@@ -186,13 +186,12 @@ app.post("/project/:code/mix", (req, res) => {
 
   filter += `${labels.join("")}amix=inputs=${clips.length}:duration=longest:normalize=0[mix]`;
 
-  const command =
-    `ffmpeg -y ${inputs} -f lavfi -i color=c=black:s=1280x720:r=30:d=600 ` +
-    `-filter_complex "${filter}" ` +
-    `-map ${clips.length}:v -map "[mix]" ` +
-    `-shortest -c:v libx264 -preset veryfast -pix_fmt yuv420p ` +
-    `-c:a aac -b:a 192k -movflags +faststart "${outputPath}"`;
-
+ const command =
+  `ffmpeg -y ${inputs} -f lavfi -i color=c=black:s=320x180:r=1:d=1 ` +
+  `-filter_complex "${filter}" ` +
+  `-map ${clips.length}:v -map "[mix]" ` +
+  `-c:v libx264 -preset ultrafast -tune stillimage -pix_fmt yuv420p ` +
+  `-c:a aac -b:a 128k -movflags +faststart "${outputPath}"`;
   exec(command, error => {
     if (error) {
       console.error(error);
