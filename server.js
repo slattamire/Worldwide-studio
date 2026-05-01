@@ -91,6 +91,9 @@ app.post("/project/:code/upload-clip", upload.single("file"), (req, res) => {
   if (type === "beat") {
     const oldBeatIndex = clips.findIndex(c => c.type === "beat");
     if (oldBeatIndex !== -1) {
+      const oldBeat = clips[oldBeatIndex];
+      const oldBeatPath = path.join(dir, oldBeat.fileName);
+      if (fs.existsSync(oldBeatPath)) fs.unlinkSync(oldBeatPath);
       clips.splice(oldBeatIndex, 1);
     }
   }
@@ -116,7 +119,6 @@ app.post("/project/:code/update-clips", (req, res) => {
 
   const updated = existingClips.map(oldClip => {
     const newClip = incomingClips.find(c => c.id === oldClip.id);
-
     if (!newClip) return oldClip;
 
     return {
@@ -185,10 +187,11 @@ app.post("/project/:code/mix", (req, res) => {
   filter += `${labels.join("")}amix=inputs=${clips.length}:duration=longest:normalize=0[mix]`;
 
   const command =
-  `ffmpeg -y ${inputs} -filter_complex "${filter}" -map "[mix]" ` +
-  `-f lavfi -i color=c=black:s=1280x720:d=600 ` +
-  `-shortest -c:v libx264 -preset veryfast -pix_fmt yuv420p ` +
-  `-c:a aac -b:a 192k "${outputPath}"`; -map "[mix]" "${outputPath}"`;
+    `ffmpeg -y ${inputs} -f lavfi -i color=c=black:s=1280x720:r=30:d=600 ` +
+    `-filter_complex "${filter}" ` +
+    `-map ${clips.length}:v -map "[mix]" ` +
+    `-shortest -c:v libx264 -preset veryfast -pix_fmt yuv420p ` +
+    `-c:a aac -b:a 192k -movflags +faststart "${outputPath}"`;
 
   exec(command, error => {
     if (error) {
@@ -196,8 +199,8 @@ app.post("/project/:code/mix", (req, res) => {
       return res.status(500).send("Mix failed");
     }
 
-   res.json({
-  url: `/projects/${code}/final_mix.mp4`
+    res.json({
+      url: `/projects/${code}/final_mix.mp4`
     });
   });
 });
