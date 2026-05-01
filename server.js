@@ -163,7 +163,7 @@ app.post("/project/:code/mix", (req, res) => {
     return res.status(400).send("No clips");
   }
 
-  const outputPath = path.join(dir, "final_mix.mp3");
+  const outputPath = path.join(dir, "final_mix.mp4");
 
   const inputs = clips
     .map(c => `-i "${path.join(dir, c.fileName)}"`)
@@ -185,7 +185,10 @@ app.post("/project/:code/mix", (req, res) => {
   filter += `${labels.join("")}amix=inputs=${clips.length}:duration=longest:normalize=0[mix]`;
 
   const command =
-    `ffmpeg -y ${inputs} -filter_complex "${filter}" -map "[mix]" "${outputPath}"`;
+  `ffmpeg -y ${inputs} -filter_complex "${filter}" -map "[mix]" ` +
+  `-f lavfi -i color=c=black:s=1280x720:d=600 ` +
+  `-shortest -c:v libx264 -preset veryfast -pix_fmt yuv420p ` +
+  `-c:a aac -b:a 192k "${outputPath}"`; -map "[mix]" "${outputPath}"`;
 
   exec(command, error => {
     if (error) {
@@ -193,8 +196,8 @@ app.post("/project/:code/mix", (req, res) => {
       return res.status(500).send("Mix failed");
     }
 
-    res.json({
-      url: `/projects/${code}/final_mix.mp3`
+   res.json({
+  url: `/projects/${code}/final_mix.mp4`
     });
   });
 });
