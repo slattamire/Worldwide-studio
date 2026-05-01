@@ -1,0 +1,66 @@
+[
+  {
+    "id": "1777601854823_2b8se68jq8b",
+    "name": "beat",
+    "type": "beat",
+    "fileName": "beat.beat",
+    "start": 0,
+    "volume": 0.4
+  },
+  {
+    "id": "1777601921279_gdwfzlsqxii",
+    "name": "alone",
+    "type": "vocal",
+    "fileName": "alone.webm",
+    "start": 0.95,
+    "volume": 1
+  },
+  {
+    "id": "1777602479928_4a3qycj159",
+    "name": "verse_2",
+    "type": "vocal",
+    "fileName": "verse_2.webm",
+    "start": 0,
+    "volume": 1
+  },
+  {
+    "id": "1777602561417_9oirvob8jz5",
+    "name": "verse_2",
+    "type": "vocal",
+    "fileName": "verse_2.webm",
+    "start": 0,
+    "volume": 1
+  },
+  {
+    "id": "1777602569915_4b0kfzqy7je",
+    "name": "verse_2",
+    "type": "vocal",
+    "fileName": "verse_2.webm",
+    "start": 0,
+    "volume": 1
+  },
+  {
+    "id": "1777602588234_d8azmrhi5ah",
+    "name": "verse_2",
+    "type": "vocal",
+    "fileName": "verse_2.webm",
+    "start": 0,
+    "volume": 1
+  },
+  {
+    "id": "1777602702404_45ouogg2huu",
+    "name": "afeawf",
+    "type": "vocal",
+    "fileName": "afeawf.webm",
+    "start": 0,
+    "volume": 1
+  },
+  {
+    "id": "1777602710985_my170f5u6q",
+    "name": "afeawf",
+    "type": "vocal",
+    "fileName": "afeawf.webm",
+    "start": 0,
+    "volume": 1
+  }
+]

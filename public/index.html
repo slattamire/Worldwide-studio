@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>VRChat Mini DAW</title>
+
+<style>
+body {
+  background: #111;
+  color: white;
+  font-family: Arial;
+  text-align: center;
+  padding: 20px;
+}
+
+button {
+  padding: 10px 18px;
+  margin: 5px;
+  cursor: pointer;
+}
+
+input {
+  margin: 5px;
+}
+
+#timeline {
+  width: 95%;
+  height: 420px;
+  margin: 30px auto;
+  background: #222;
+  border: 1px solid #555;
+  position: relative;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+.clip {
+  position: absolute;
+  height: 62px;
+  background: #4b8cff;
+  border-radius: 6px;
+  cursor: grab;
+  user-select: none;
+  padding: 6px;
+  box-sizing: border-box;
+  text-align: left;
+  font-size: 13px;
+}
+
+.clip.beat {
+  background: #9b5cff;
+}
+
+.clip.vocal {
+  background: #31c48d;
+}
+
+.clip-name {
+  font-weight: bold;
+}
+
+.delete-btn {
+  float: right;
+  padding: 2px 7px;
+  margin: 0;
+  font-size: 11px;
+  background: #ff4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+}
+
+.clip-controls {
+  font-size: 11px;
+  margin-top: 8px;
+}
+
+#timeRuler {
+  height: 28px;
+  background: #181818;
+  border-bottom: 1px solid #555;
+  position: relative;
+}
+
+.ruler-mark {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-left: 1px solid #555;
+  font-size: 10px;
+  color: #aaa;
+  padding-left: 3px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>VRChat Mini DAW</h1>
+
+<h2>Project</h2>
+
+<button onclick="createProject()">Create New Project</button>
+<br>
+
+<input id="projectCode" placeholder="Project Code" style="padding:10px;text-align:center;text-transform:uppercase;">
+<button onclick="joinProject()">Join Project</button>
+<button onclick="copyInviteLink()">Copy Invite Link</button>
+
+<p id="projectStatus">No project loaded.</p>
+<p id="inviteLink" style="color:#7dd3fc;"></p>
+
+<hr>
+
+<h2>Upload Beat</h2>
+
+<input type="file" id="beat">
+<button onclick="uploadBeat()">Upload Beat To Project</button>
+
+<hr>
+
+<h2>Record Vocal Take</h2>
+
+<input id="takeName" placeholder="take name ex: frank_verse" style="padding:10px;text-align:center;">
+
+<br>
+
+<button onclick="startRecording()">🎤 Start Recording</button>
+<button onclick="stopRecording()">⏹ Stop + Auto Save</button>
+
+<p id="recordStatus"></p>
+
+<audio id="preview" controls style="margin-top:15px; display:none;"></audio>
+
+<hr>
+
+<h2>Timeline</h2>
+<p>Drag clips left/right to change timing. Use volume sliders per clip.</p>
+
+<div id="timeline">
+  <div id="timeRuler"></div>
+</div>
+
+<button onclick="saveTimeline()">Save Timeline</button>
+<button onclick="mixProject()">Mix Project</button>
+
+<p id="status"></p>
+
+<audio id="player" controls style="display:none;margin-top:20px;"></audio>
+<p id="link"></p>
+
+<script>
+let currentProjectCode = "";
+let clips = [];
+let autoRefreshTimer = null;
+let isDraggingClip = false;
+
+let mediaRecorder;
+let audioChunks = [];
+let recordedBlob = null;
+let currentStream = null;
+
+const pixelsPerSecond = 20;
+const clipWidth = 220;
+const trackHeight = 75;
+
+function drawRuler() {
+  const ruler = document.getElementById("timeRuler");
+  ruler.innerHTML = "";
+
+  for (let sec = 0; sec <= 60; sec += 5) {
+    const mark = document.createElement("div");
+    mark.className = "ruler-mark";
+    mark.style.left = (sec * pixelsPerSecond) + "px";
+    mark.innerText = sec + "s";
+    ruler.appendChild(mark);
+  }
+}
+
+function setProject(code) {
+  currentProjectCode = code.toUpperCase();
+  document.getElementById("projectCode").value = currentProjectCode;
+  document.getElementById("projectStatus").innerText =
+    "Project loaded: " + currentProjectCode;
+
+  const invite = window.location.origin + "/?project=" + currentProjectCode;
+  document.getElementById("inviteLink").innerText = invite;
+
+  startAutoRefresh();
+}
+
+function startAutoRefresh() {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+
+  autoRefreshTimer = setInterval(async () => {
+    if (!currentProjectCode || isDraggingClip) return;
+    await loadClips(false);
+  }, 3000);
+}
+
+async function createProject() {
+  const response = await fetch("/create-project", { method: "POST" });
+  const data = await response.json();
+
+  setProject(data.code);
+  await loadClips();
+}
+
+async function joinProject() {
+  const code = document.getElementById("projectCode").value.trim().toUpperCase();
+
+  if (!code) return;
+
+  setProject(code);
+  await loadClips();
+}
+
+async function copyInviteLink() {
+  if (!currentProjectCode) {
+    alert("Create or join a project first.");
+    return;
+  }
+
+  const invite = window.location.origin + "/?project=" + currentProjectCode;
+
+  await navigator.clipboard.writeText(invite);
+
+  document.getElementById("projectStatus").innerText =
+    "Invite link copied for project: " + currentProjectCode;
+}
+
+async function loadClips(showStatus = true) {
+  if (!currentProjectCode) return;
+
+  const response = await fetch(`/project/${currentProjectCode}/clips`);
+  const data = await response.json();
+
+  clips = data.clips || [];
+  renderTimeline();
+
+  if (showStatus) {
+    document.getElementById("status").innerText = "Project refreshed.";
+  }
+}
+
+async function uploadBeat() {
+  if (!currentProjectCode) {
+    alert("Create or join a project first.");
+    return;
+  }
+
+  const beat = document.getElementById("beat").files[0];
+  if (!beat) return;
+
+  const formData = new FormData();
+  formData.append("file", beat);
+  formData.append("type", "beat");
+  formData.append("name", "beat");
+
+  await fetch(`/project/${currentProjectCode}/upload-clip`, {
+    method: "POST",
+    body: formData
+  });
+
+  await loadClips();
+}
+
+async function startRecording() {
+  if (!currentProjectCode) {
+    alert("Create or join a project first.");
+    return;
+  }
+
+  currentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  audioChunks = [];
+
+  mediaRecorder = new MediaRecorder(currentStream, {
+    mimeType: "audio/webm;codecs=opus"
+  });
+
+  mediaRecorder.ondataavailable = e => {
+    if (e.data.size > 0) audioChunks.push(e.data);
+  };
+
+  mediaRecorder.onstop = async () => {
+    recordedBlob = new Blob(audioChunks, {
+      type: "audio/webm;codecs=opus"
+    });
+
+    const url = URL.createObjectURL(recordedBlob);
+
+    const preview = document.getElementById("preview");
+    preview.src = url;
+    preview.style.display = "block";
+
+    if (currentStream) {
+      currentStream.getTracks().forEach(track => track.stop());
+    }
+
+    await uploadRecordedTake();
+  };
+
+  mediaRecorder.start();
+  document.getElementById("recordStatus").innerText = "Recording...";
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    mediaRecorder.stop();
+    document.getElementById("recordStatus").innerText =
+      "Recording stopped. Auto-saving...";
+  }
+}
+
+async function uploadRecordedTake() {
+  const takeName =
+    document.getElementById("takeName").value.trim() ||
+    "take_" + Date.now();
+
+  const formData = new FormData();
+  formData.append("file", recordedBlob, "recording.webm");
+  formData.append("type", "vocal");
+  formData.append("name", takeName);
+
+  await fetch(`/project/${currentProjectCode}/upload-clip`, {
+    method: "POST",
+    body: formData
+  });
+
+  document.getElementById("recordStatus").innerText =
+    "Take auto-saved to project.";
+
+  await loadClips();
+}
+
+function renderTimeline() {
+  const timeline = document.getElementById("timeline");
+  timeline.innerHTML = '<div id="timeRuler"></div>';
+  drawRuler();
+
+  clips.forEach((clip, index) => {
+    const div = document.createElement("div");
+
+    div.className = "clip " + clip.type;
+    div.dataset.id = clip.id;
+
+    div.style.left = (clip.start * pixelsPerSecond) + "px";
+    div.style.top = (35 + index * trackHeight) + "px";
+    div.style.width = clipWidth + "px";
+
+    div.innerHTML = `
+      <div class="clip-name">
+        ${clip.name} (${clip.type})
+        <button class="delete-btn" onclick="deleteClip('${clip.id}')">X</button>
+      </div>
+
+      <div class="clip-controls">
+        Vol:
+        <input type="range" min="0" max="2" step="0.05"
+          value="${clip.volume}"
+          oninput="changeClipVolume('${clip.id}', this.value)">
+        ${Math.round(clip.volume * 100)}%
+      </div>
+    `;
+
+    makeDraggable(div, clip);
+    timeline.appendChild(div);
+  });
+}
+
+function makeDraggable(element, clip) {
+  let isDragging = false;
+  let startX = 0;
+  let originalLeft = 0;
+
+  element.addEventListener("mousedown", e => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") return;
+
+    isDragging = true;
+    isDraggingClip = true;
+    startX = e.clientX;
+    originalLeft = parseFloat(element.style.left) || 0;
+  });
+
+  window.addEventListener("mousemove", e => {
+    if (!isDragging) return;
+
+    let newLeft = originalLeft + (e.clientX - startX);
+    if (newLeft < 0) newLeft = 0;
+
+    element.style.left = newLeft + "px";
+
+    clip.start =
+      Math.round((newLeft / pixelsPerSecond) * 100) / 100;
+  });
+
+  window.addEventListener("mouseup", () => {
+    if (isDragging) {
+      isDragging = false;
+      isDraggingClip = false;
+    }
+  });
+}
+
+function changeClipVolume(id, value) {
+  const clip = clips.find(c => c.id === id);
+  if (!clip) return;
+
+  clip.volume = Number(value);
+  renderTimeline();
+}
+
+async function deleteClip(id) {
+  const response = await fetch(
+    `/project/${currentProjectCode}/clip/${id}`,
+    { method: "DELETE" }
+  );
+
+  if (!response.ok) {
+    document.getElementById("status").innerText = "Delete failed.";
+    return;
+  }
+
+  await loadClips();
+}
+
+async function saveTimeline() {
+  if (!currentProjectCode) return;
+
+  await fetch(`/project/${currentProjectCode}/update-clips`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ clips })
+  });
+
+  document.getElementById("status").innerText = "Timeline saved.";
+}
+
+async function mixProject() {
+  await saveTimeline();
+
+  const response = await fetch(`/project/${currentProjectCode}/mix`, {
+    method: "POST"
+  });
+
+  if (!response.ok) {
+    document.getElementById("status").innerText = "Mix failed.";
+    return;
+  }
+
+  const data = await response.json();
+
+  const player = document.getElementById("player");
+  player.src = data.url + "?t=" + Date.now();
+  player.style.display = "block";
+
+  document.getElementById("link").innerText =
+    "Playable link: " + window.location.origin + data.url;
+}
+
+async function autoJoinFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("project");
+
+  if (!code) {
+    drawRuler();
+    return;
+  }
+
+  setProject(code);
+  await loadClips();
+}
+
+autoJoinFromUrl();
+</script>
+
+</body>
+</html>

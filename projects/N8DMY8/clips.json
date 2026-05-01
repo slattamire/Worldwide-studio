@@ -1,0 +1,18 @@
+[
+  {
+    "id": "1777602892565_l2s2ru9krw",
+    "name": "beat",
+    "type": "beat",
+    "fileName": "beat.beat",
+    "start": 0,
+    "volume": 1
+  },
+  {
+    "id": "1777602897909_9rn6wep7pud",
+    "name": "p1",
+    "type": "vocal",
+    "fileName": "p1.webm",
+    "start": 0,
+    "volume": 1
+  }
+]
