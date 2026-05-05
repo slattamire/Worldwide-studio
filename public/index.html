@@ -25,7 +25,7 @@ input{
 
 #timeline{
   width:95%;
-  height:420px;
+  height:520px;
   margin:30px auto;
   background:#222;
   border:1px solid #555;
@@ -36,27 +36,26 @@ input{
 
 .clip{
   position:absolute;
-  height:62px;
+  height:115px;
+  min-width:90px;
   background:#4b8cff;
   border-radius:6px;
   cursor:grab;
   user-select:none;
-  padding:6px;
+  padding:6px 14px;
   box-sizing:border-box;
   text-align:left;
   font-size:13px;
+  overflow:hidden;
 }
 
-.clip.beat{
-  background:#9b5cff;
-}
-
-.clip.vocal{
-  background:#31c48d;
-}
+.clip.beat{ background:#9b5cff; }
+.clip.vocal{ background:#31c48d; }
 
 .clip-name{
   font-weight:bold;
+  position:relative;
+  z-index:3;
 }
 
 .delete-btn{
@@ -70,9 +69,36 @@ input{
   border-radius:4px;
 }
 
+.waveform{
+  width:100%;
+  height:42px;
+  margin-top:8px;
+  background:rgba(0,0,0,0.25);
+  border-radius:4px;
+  display:block;
+  pointer-events:none;
+}
+
+.trim-handle{
+  position:absolute;
+  top:0;
+  width:14px;
+  height:100%;
+  background:white;
+  opacity:0.9;
+  cursor:ew-resize;
+  z-index:20;
+  pointer-events:auto;
+}
+
+.trim-handle.left{ left:0; }
+.trim-handle.right{ right:0; }
+
 .clip-controls{
   font-size:11px;
   margin-top:8px;
+  position:relative;
+  z-index:3;
 }
 
 #timeRuler{
@@ -80,6 +106,7 @@ input{
   background:#181818;
   border-bottom:1px solid #555;
   position:relative;
+  min-width:2400px;
 }
 
 .ruler-mark{
@@ -98,8 +125,6 @@ input{
 
 <h1>WorldWide Studio</h1>
 
-<h2></h2>
-
 <button onclick="createProject()">Create New Project</button>
 <br>
 
@@ -113,7 +138,6 @@ input{
 <hr>
 
 <h2>Upload Beat</h2>
-
 <input type="file" id="beat">
 <button onclick="uploadBeat()">Upload Beat To Project</button>
 
@@ -134,7 +158,7 @@ input{
 <hr>
 
 <h2>Timeline</h2>
-<p>Drag clips left/right to change timing. Use volume sliders per clip.</p>
+<p>Drag the middle to move clips. Drag the white sides to trim.</p>
 
 <div id="timeline">
   <div id="timeRuler"></div>
@@ -161,14 +185,16 @@ let recordedBlob = null;
 let currentStream = null;
 
 const pixelsPerSecond = 20;
-const clipWidth = 220;
-const trackHeight = 75;
+const trackHeight = 130;
+
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const audioBufferCache = {};
 
 function drawRuler(){
   const ruler = document.getElementById("timeRuler");
   ruler.innerHTML = "";
 
-  for(let sec=0; sec<=60; sec+=5){
+  for(let sec=0; sec<=180; sec+=5){
     const mark = document.createElement("div");
     mark.className = "ruler-mark";
     mark.style.left = (sec * pixelsPerSecond) + "px";
@@ -184,9 +210,7 @@ function setProject(code){
   document.getElementById("projectStatus").innerText =
     "Project loaded: " + currentProjectCode;
 
-  const invite =
-    window.location.origin + "/?project=" + currentProjectCode;
-
+  const invite = window.location.origin + "/?project=" + currentProjectCode;
   document.getElementById("inviteLink").innerText = invite;
 
   startAutoRefresh();
@@ -210,9 +234,7 @@ async function createProject(){
 }
 
 async function joinProject(){
-  const code =
-    document.getElementById("projectCode").value.trim().toUpperCase();
-
+  const code = document.getElementById("projectCode").value.trim().toUpperCase();
   if(!code) return;
 
   setProject(code);
@@ -222,33 +244,32 @@ async function joinProject(){
 async function copyInviteLink(){
   if(!currentProjectCode) return;
 
-  const invite =
-    window.location.origin + "/?project=" + currentProjectCode;
-
+  const invite = window.location.origin + "/?project=" + currentProjectCode;
   await navigator.clipboard.writeText(invite);
 
-  document.getElementById("status").innerText =
-    "Invite link copied.";
+  document.getElementById("status").innerText = "Invite link copied.";
 }
 
 async function loadClips(showStatus=true){
   if(!currentProjectCode) return;
 
-  const response =
-    await fetch(`/project/${currentProjectCode}/clips`);
-
+  const response = await fetch(`/project/${currentProjectCode}/clips`);
   const data = await response.json();
 
   clips = data.clips || [];
   renderTimeline();
 
   if(showStatus){
-    document.getElementById("status").innerText =
-      "Project refreshed.";
+    document.getElementById("status").innerText = "Project refreshed.";
   }
 }
 
 async function uploadBeat(){
+  if(!currentProjectCode){
+    alert("Create or join a project first.");
+    return;
+  }
+
   const beat = document.getElementById("beat").files[0];
   if(!beat) return;
 
@@ -266,9 +287,12 @@ async function uploadBeat(){
 }
 
 async function startRecording(){
-  currentStream =
-    await navigator.mediaDevices.getUserMedia({audio:true});
+  if(!currentProjectCode){
+    alert("Create or join a project first.");
+    return;
+  }
 
+  currentStream = await navigator.mediaDevices.getUserMedia({audio:true});
   audioChunks = [];
 
   mediaRecorder = new MediaRecorder(currentStream,{
@@ -297,16 +321,13 @@ async function startRecording(){
 
   mediaRecorder.start();
 
-  document.getElementById("recordStatus").innerText =
-    "Recording...";
+  document.getElementById("recordStatus").innerText = "Recording...";
 }
 
 function stopRecording(){
   if(mediaRecorder && mediaRecorder.state==="recording"){
     mediaRecorder.stop();
-
-    document.getElementById("recordStatus").innerText =
-      "Saving take...";
+    document.getElementById("recordStatus").innerText = "Saving take...";
   }
 }
 
@@ -325,43 +346,45 @@ async function uploadRecordedTake(){
     body:formData
   });
 
-  document.getElementById("recordStatus").innerText =
-    "Take saved.";
+  document.getElementById("recordStatus").innerText = "Take saved.";
 
   await loadClips();
 }
 
 function renderTimeline(){
   const timeline = document.getElementById("timeline");
-
-  timeline.innerHTML =
-    '<div id="timeRuler"></div>';
+  timeline.innerHTML = '<div id="timeRuler"></div>';
 
   drawRuler();
 
   clips.forEach((clip,index)=>{
+    if(clip.trimStart === undefined) clip.trimStart = 0;
+
+    const duration = Number(clip.duration || 8);
+    if(!clip.trimEnd || clip.trimEnd <= 0) clip.trimEnd = duration;
+
+    const visibleDuration = Math.max(0.5, clip.trimEnd - clip.trimStart);
+    const width = Math.max(90, visibleDuration * pixelsPerSecond);
 
     const div = document.createElement("div");
 
     div.className = "clip " + clip.type;
     div.dataset.id = clip.id;
 
-    div.style.left =
-      (clip.start * pixelsPerSecond) + "px";
-
-    div.style.top =
-      (35 + index * trackHeight) + "px";
-
-    div.style.width = clipWidth + "px";
+    div.style.left = (Number(clip.start || 0) * pixelsPerSecond) + "px";
+    div.style.top = (35 + index * trackHeight) + "px";
+    div.style.width = width + "px";
 
     div.innerHTML = `
       <div class="clip-name">
         ${clip.name} (${clip.type})
-        <button class="delete-btn"
-          onclick="deleteClip('${clip.id}')">
-          X
-        </button>
+        <button class="delete-btn" onclick="deleteClip('${clip.id}')">X</button>
       </div>
+
+      <canvas class="waveform" id="wave-${clip.id}"></canvas>
+
+      <div class="trim-handle left"></div>
+      <div class="trim-handle right"></div>
 
       <div class="clip-controls">
         Vol:
@@ -378,10 +401,88 @@ function renderTimeline(){
       </div>
     `;
 
-    makeDraggable(div,clip);
-
     timeline.appendChild(div);
+
+    makeDraggable(div,clip);
+    makeTrimHandles(div,clip);
+    drawRealWaveform(clip, div);
   });
+}
+
+async function getAudioBuffer(clip){
+  const url = `/projects/${currentProjectCode}/${clip.fileName}`;
+
+  if(audioBufferCache[url]) return audioBufferCache[url];
+
+  const response = await fetch(url);
+  const arrayBuffer = await response.arrayBuffer();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+  audioBufferCache[url] = audioBuffer;
+  return audioBuffer;
+}
+
+async function drawRealWaveform(clip, div){
+  try{
+    const canvas = document.getElementById("wave-" + clip.id);
+    if(!canvas) return;
+
+    const buffer = await getAudioBuffer(clip);
+
+    if(!clip.duration || clip.duration <= 0 || Math.abs(Number(clip.duration) - buffer.duration) > 1){
+      clip.duration = buffer.duration;
+
+      if(!clip.trimEnd || clip.trimEnd <= 0 || clip.trimEnd === 8){
+        clip.trimEnd = buffer.duration;
+      }
+
+      if(clip.trimStart < 0) clip.trimStart = 0;
+      if(clip.trimEnd > buffer.duration) clip.trimEnd = buffer.duration;
+
+      scheduleSave();
+    }
+
+    canvas.width = div.clientWidth;
+    canvas.height = 42;
+
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.clearRect(0,0,w,h);
+
+    const data = buffer.getChannelData(0);
+
+    const startSample = Math.floor((clip.trimStart || 0) * buffer.sampleRate);
+    const endSample = Math.floor((clip.trimEnd || buffer.duration) * buffer.sampleRate);
+    const samples = Math.max(1, endSample - startSample);
+
+    const step = Math.ceil(samples / w);
+
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+
+    for(let x=0; x<w; x++){
+      let min = 1;
+      let max = -1;
+
+      const sampleStart = startSample + x * step;
+      const sampleEnd = Math.min(sampleStart + step, endSample);
+
+      for(let i=sampleStart; i<sampleEnd; i++){
+        const value = data[i] || 0;
+        if(value < min) min = value;
+        if(value > max) max = value;
+      }
+
+      const y1 = ((1 + min) * h) / 2;
+      const y2 = ((1 + max) * h) / 2;
+      const barHeight = Math.max(1, y2 - y1);
+
+      ctx.fillRect(x, y1, 1, barHeight);
+    }
+  }catch(err){
+    console.warn("Waveform failed:", err);
+  }
 }
 
 function makeDraggable(element,clip){
@@ -390,38 +491,128 @@ function makeDraggable(element,clip){
   let originalLeft = 0;
 
   element.addEventListener("mousedown",e=>{
-
     if(
       e.target.tagName==="INPUT" ||
-      e.target.tagName==="BUTTON"
+      e.target.tagName==="BUTTON" ||
+      e.target.classList.contains("trim-handle")
     ) return;
 
     isDragging = true;
     isDraggingClip = true;
 
     startX = e.clientX;
-    originalLeft =
-      parseFloat(element.style.left) || 0;
+    originalLeft = parseFloat(element.style.left) || 0;
   });
 
   window.addEventListener("mousemove",e=>{
     if(!isDragging) return;
 
-    let newLeft =
-      originalLeft + (e.clientX - startX);
-
+    let newLeft = originalLeft + (e.clientX - startX);
     if(newLeft < 0) newLeft = 0;
 
     element.style.left = newLeft + "px";
 
     clip.start =
-      Math.round(
-        (newLeft / pixelsPerSecond) * 100
-      ) / 100;
+      Math.round((newLeft / pixelsPerSecond) * 100) / 100;
   });
 
   window.addEventListener("mouseup",()=>{
+    if(isDragging){
+      scheduleSave();
+    }
+
     isDragging = false;
+    isDraggingClip = false;
+  });
+}
+
+function makeTrimHandles(element, clip){
+  const left = element.querySelector(".trim-handle.left");
+  const right = element.querySelector(".trim-handle.right");
+
+  let mode = null;
+  let startX = 0;
+  let originalLeft = 0;
+  let originalWidth = 0;
+  let originalTrimStart = 0;
+  let originalTrimEnd = 0;
+
+  function startResize(e, resizeMode){
+    e.stopPropagation();
+    e.preventDefault();
+
+    mode = resizeMode;
+    isDraggingClip = true;
+
+    startX = e.clientX;
+    originalLeft = parseFloat(element.style.left) || 0;
+    originalWidth = parseFloat(element.style.width) || 90;
+    originalTrimStart = Number(clip.trimStart || 0);
+    originalTrimEnd = Number(clip.trimEnd || clip.duration || 0);
+  }
+
+  left.onmousedown = e => startResize(e,"left");
+  right.onmousedown = e => startResize(e,"right");
+
+  window.addEventListener("mousemove",e=>{
+    if(!mode) return;
+
+    const deltaPx = e.clientX - startX;
+    const deltaSec = deltaPx / pixelsPerSecond;
+
+    if(mode === "left"){
+      let newTrimStart = originalTrimStart + deltaSec;
+      let newLeft = originalLeft + deltaPx;
+      let newWidth = originalWidth - deltaPx;
+
+      if(newTrimStart < 0){
+        newTrimStart = 0;
+        newLeft = originalLeft - (originalTrimStart * pixelsPerSecond);
+        newWidth = originalWidth + (originalTrimStart * pixelsPerSecond);
+      }
+
+      if(newTrimStart >= originalTrimEnd - 0.25){
+        newTrimStart = originalTrimEnd - 0.25;
+        newWidth = 0.25 * pixelsPerSecond;
+      }
+
+      if(newLeft < 0){
+        newLeft = 0;
+      }
+
+      clip.trimStart = Math.round(newTrimStart * 100) / 100;
+      clip.start = Math.round((newLeft / pixelsPerSecond) * 100) / 100;
+
+      element.style.left = newLeft + "px";
+      element.style.width = Math.max(20,newWidth) + "px";
+    }
+
+    if(mode === "right"){
+      let newTrimEnd = originalTrimEnd + deltaSec;
+
+      if(newTrimEnd > clip.duration){
+        newTrimEnd = clip.duration;
+      }
+
+      if(newTrimEnd <= originalTrimStart + 0.25){
+        newTrimEnd = originalTrimStart + 0.25;
+      }
+
+      clip.trimEnd = Math.round(newTrimEnd * 100) / 100;
+
+      const newWidth = Math.max(20, (clip.trimEnd - clip.trimStart) * pixelsPerSecond);
+      element.style.width = newWidth + "px";
+    }
+
+    drawRealWaveform(clip, element);
+  });
+
+  window.addEventListener("mouseup",()=>{
+    if(mode){
+      scheduleSave();
+    }
+
+    mode = null;
     isDraggingClip = false;
   });
 }
@@ -432,14 +623,16 @@ function changeClipVolume(id,value){
 
   clip.volume = Number(value);
 
-  const volText =
-    document.getElementById("vol-" + id);
+  const volText = document.getElementById("vol-" + id);
 
   if(volText){
-    volText.innerText =
-      Math.round(clip.volume*100) + "%";
+    volText.innerText = Math.round(clip.volume*100) + "%";
   }
 
+  scheduleSave();
+}
+
+function scheduleSave(){
   if(saveTimer) clearTimeout(saveTimer);
 
   saveTimer = setTimeout(async ()=>{
@@ -448,55 +641,54 @@ function changeClipVolume(id,value){
 }
 
 async function deleteClip(id){
-  await fetch(
-    `/project/${currentProjectCode}/clip/${id}`,
-    {method:"DELETE"}
-  );
+  await fetch(`/project/${currentProjectCode}/clip/${id}`,{
+    method:"DELETE"
+  });
 
   await loadClips();
 }
 
 async function saveTimeline(){
-  await fetch(
-    `/project/${currentProjectCode}/update-clips`,
-    {
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json"
-      },
-      body:JSON.stringify({clips})
-    }
-  );
+  if(!currentProjectCode) return;
+
+  await fetch(`/project/${currentProjectCode}/update-clips`,{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify({clips})
+  });
 }
 
 async function mixProject(){
   await saveTimeline();
 
-  const response =
-    await fetch(`/project/${currentProjectCode}/mix`,{
-      method:"POST"
-    });
+  document.getElementById("status").innerText = "Exporting mix...";
+
+  const response = await fetch(`/project/${currentProjectCode}/mix`,{
+    method:"POST"
+  });
+
+  if(!response.ok){
+    document.getElementById("status").innerText = "Mix failed.";
+    return;
+  }
 
   const data = await response.json();
 
-  const player =
-    document.getElementById("player");
+  const player = document.getElementById("player");
 
-  player.src =
-    data.url + "?t=" + Date.now();
-
+  player.src = data.url + "?t=" + Date.now();
   player.style.display = "block";
 
   document.getElementById("link").innerText =
-    "Playable link: " +
-    window.location.origin +
-    data.url;
+    "Playable link: " + window.location.origin + data.url;
+
+  document.getElementById("status").innerText = "Mix exported.";
 }
 
 async function autoJoinFromUrl(){
-  const params =
-    new URLSearchParams(window.location.search);
-
+  const params = new URLSearchParams(window.location.search);
   const code = params.get("project");
 
   if(!code){

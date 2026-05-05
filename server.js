@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 8080;
 
 const upload = multer({ dest: "uploads/" });
 
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/projects", express.static(path.join(__dirname, "projects")));
 
@@ -53,13 +53,15 @@ function saveClips(code, clips) {
 }
 
 function safeName(name) {
-  return name.replace(/[^a-z0-9_-]/gi, "_");
+  return String(name || "clip").replace(/[^a-z0-9_-]/gi, "_");
 }
 
 app.post("/create-project", (req, res) => {
   const code = makeCode();
+
   fs.mkdirSync(projectDir(code), { recursive: true });
   saveClips(code, []);
+
   res.json({ code });
 });
 
@@ -81,19 +83,28 @@ app.post("/project/:code/upload-clip", upload.single("file"), (req, res) => {
   }
 
   const ext = type === "beat" ? ".beat" : ".webm";
-  const fileName = `${name}${ext}`;
+  const fileName = `${name}_${Date.now()}${ext}`;
   const finalPath = path.join(dir, fileName);
 
   fs.copyFileSync(req.file.path, finalPath);
+
+  try {
+    fs.unlinkSync(req.file.path);
+  } catch (err) {}
 
   const clips = loadClips(code);
 
   if (type === "beat") {
     const oldBeatIndex = clips.findIndex(c => c.type === "beat");
+
     if (oldBeatIndex !== -1) {
       const oldBeat = clips[oldBeatIndex];
       const oldBeatPath = path.join(dir, oldBeat.fileName);
-      if (fs.existsSync(oldBeatPath)) fs.unlinkSync(oldBeatPath);
+
+      if (fs.existsSync(oldBeatPath)) {
+        fs.unlinkSync(oldBeatPath);
+      }
+
       clips.splice(oldBeatIndex, 1);
     }
   }
@@ -104,7 +115,10 @@ app.post("/project/:code/upload-clip", upload.single("file"), (req, res) => {
     type,
     fileName,
     start: 0,
-    volume: 1
+    volume: 1,
+    trimStart: 0,
+    trimEnd: 0,
+    duration: 0
   });
 
   saveClips(code, clips);
@@ -124,7 +138,10 @@ app.post("/project/:code/update-clips", (req, res) => {
     return {
       ...oldClip,
       start: Number(newClip.start || 0),
-      volume: Number(newClip.volume || 1)
+      volume: Number(newClip.volume || 1),
+      trimStart: Number(newClip.trimStart || 0),
+      trimEnd: Number(newClip.trimEnd || 0),
+      duration: Number(newClip.duration || oldClip.duration || 0)
     };
   });
 
@@ -142,7 +159,9 @@ app.delete("/project/:code/clip/:id", (req, res) => {
 
   const clip = clips.find(c => c.id === id);
 
-  if (!clip) return res.status(404).send("Clip not found");
+  if (!clip) {
+    return res.status(404).send("Clip not found");
+  }
 
   const filePath = path.join(dir, clip.fileName);
 
@@ -175,26 +194,39 @@ app.post("/project/:code/mix", (req, res) => {
   const labels = [];
 
   clips.forEach((clip, index) => {
-    const delayMs = Math.round(Number(clip.start || 0) * 1000);
+    const delayMs = Math.max(0, Math.round(Number(clip.start || 0) * 1000));
     const volume = Number(clip.volume || 1);
-    const label = `a${index}`;
 
+    const trimStart = Math.max(0, Number(clip.trimStart || 0));
+    const trimEnd = Number(clip.trimEnd || 0);
+
+    const label = `a${index}`;
     labels.push(`[${label}]`);
 
-    filter += `[${index}:a]volume=${volume},adelay=${delayMs}|${delayMs}[${label}];`;
+    let trimFilter = `atrim=start=${trimStart}`;
+
+    if (trimEnd > trimStart) {
+      trimFilter += `:end=${trimEnd}`;
+    }
+
+    filter += `[${index}:a]${trimFilter},asetpts=PTS-STARTPTS,volume=${volume},adelay=${delayMs}|${delayMs}[${label}];`;
   });
 
   filter += `${labels.join("")}amix=inputs=${clips.length}:duration=longest:normalize=0[mix]`;
 
- const command =
-  `ffmpeg -y ${inputs} -f lavfi -i color=c=black:s=320x180:r=1:d=1 ` +
-  `-filter_complex "${filter}" ` +
-  `-map ${clips.length}:v -map "[mix]" ` +
-  `-c:v libx264 -preset ultrafast -tune stillimage -pix_fmt yuv420p ` +
-  `-c:a aac -b:a 128k -movflags +faststart "${outputPath}"`;
+  const command =
+    `ffmpeg -y ${inputs} -f lavfi -i color=c=black:s=320x180:r=1:d=1 ` +
+    `-filter_complex "${filter}" ` +
+    `-map ${clips.length}:v -map "[mix]" ` +
+    `-c:v libx264 -preset ultrafast -tune stillimage -pix_fmt yuv420p ` +
+    `-c:a aac -b:a 128k -movflags +faststart "${outputPath}"`;
+
+  console.log("FFMPEG COMMAND:");
+  console.log(command);
+
   exec(command, error => {
     if (error) {
-      console.error(error);
+      console.error("FFMPEG MIX ERROR:", error);
       return res.status(500).send("Mix failed");
     }
 

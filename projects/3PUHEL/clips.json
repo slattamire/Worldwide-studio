@@ -1,0 +1,24 @@
+[
+  {
+    "id": "1778006969126_gfc45qr63vp",
+    "name": "beat",
+    "type": "beat",
+    "fileName": "beat_1778006969113.beat",
+    "start": 0,
+    "volume": 1,
+    "trimStart": 0,
+    "trimEnd": 181.85566666666668,
+    "duration": 181.85566666666668
+  },
+  {
+    "id": "1778006994678_r9wnth0b3nk",
+    "name": "take_1778006994671",
+    "type": "vocal",
+    "fileName": "take_1778006994671_1778006994677.webm",
+    "start": 0,
+    "volume": 1,
+    "trimStart": 0,
+    "trimEnd": 12.58,
+    "duration": 13.98
+  }
+]
