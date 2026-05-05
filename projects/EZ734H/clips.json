@@ -1,0 +1,18 @@
+[
+  {
+    "id": "1777601419169_53nfr0bia7",
+    "name": "take_1777601419153",
+    "type": "vocal",
+    "fileName": "take_1777601419153.webm",
+    "start": 3.7,
+    "volume": 1
+  },
+  {
+    "id": "1777601461773_gfmkuddsm1a",
+    "name": "beat",
+    "type": "beat",
+    "fileName": "beat.beat",
+    "start": 0,
+    "volume": 0.55
+  }
+]

@@ -32,7 +32,7 @@ input{
   position:relative;
   overflow-x:auto;
   overflow-y:auto;
-  touch-action:auto;
+  touch-action:pan-x;
 }
 
 .clip{
@@ -84,7 +84,7 @@ input{
 .trim-handle{
   position:absolute;
   top:0;
-  width:18px;
+  width:22px;
   height:100%;
   background:white;
   opacity:0.9;
@@ -113,7 +113,7 @@ input{
   background:#181818;
   border-bottom:1px solid #555;
   position:relative;
-  min-width:2400px;
+  min-width:3600px;
 }
 
 .ruler-mark{
@@ -196,6 +196,12 @@ const trackHeight = 130;
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const audioBufferCache = {};
+
+document.addEventListener("touchmove", function(e){
+  if(isDraggingClip){
+    e.preventDefault();
+  }
+}, { passive:false });
 
 function drawRuler(){
   const ruler = document.getElementById("timeRuler");
@@ -508,7 +514,10 @@ function makeDraggable(element,clip){
     e.preventDefault();
 
     pointerId = e.pointerId;
-    element.setPointerCapture(pointerId);
+
+    try{
+      element.setPointerCapture(pointerId);
+    }catch(err){}
 
     isDragging = true;
     isDraggingClip = true;
@@ -570,7 +579,10 @@ function makeTrimHandles(element, clip){
     e.preventDefault();
 
     pointerId = e.pointerId;
-    e.target.setPointerCapture(pointerId);
+
+    try{
+      e.target.setPointerCapture(pointerId);
+    }catch(err){}
 
     mode = resizeMode;
     isDraggingClip = true;
