@@ -1,0 +1,34 @@
+[
+  {
+    "id": "1777603245251_vqln1hfu6n",
+    "name": "take_1777603245246",
+    "type": "vocal",
+    "fileName": "take_1777603245246.webm",
+    "start": 0,
+    "volume": 1
+  },
+  {
+    "id": "1777603246519_2dzwhtjonyq",
+    "name": "beat",
+    "type": "beat",
+    "fileName": "beat.beat",
+    "start": 0,
+    "volume": 1
+  },
+  {
+    "id": "1777603256396_vrphein9mvj",
+    "name": "take_1777603256391",
+    "type": "vocal",
+    "fileName": "take_1777603256391.webm",
+    "start": 0,
+    "volume": 1
+  },
+  {
+    "id": "1777603280548_uad68ykkfeh",
+    "name": "take_1777603280543",
+    "type": "vocal",
+    "fileName": "take_1777603280543.webm",
+    "start": 0,
+    "volume": 1
+  }
+]

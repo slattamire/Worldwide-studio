@@ -1,0 +1,4 @@
+projects/
+uploads/
+node_modules/
+.env

@@ -32,6 +32,7 @@ input{
   position:relative;
   overflow-x:auto;
   overflow-y:auto;
+  touch-action:auto;
 }
 
 .clip{
@@ -47,6 +48,7 @@ input{
   text-align:left;
   font-size:13px;
   overflow:hidden;
+  touch-action:none;
 }
 
 .clip.beat{ background:#9b5cff; }
@@ -82,13 +84,14 @@ input{
 .trim-handle{
   position:absolute;
   top:0;
-  width:14px;
+  width:18px;
   height:100%;
   background:white;
   opacity:0.9;
   cursor:ew-resize;
   z-index:20;
   pointer-events:auto;
+  touch-action:none;
 }
 
 .trim-handle.left{ left:0; }
@@ -99,6 +102,10 @@ input{
   margin-top:8px;
   position:relative;
   z-index:3;
+}
+
+.clip-controls input{
+  touch-action:auto;
 }
 
 #timeRuler{
@@ -486,16 +493,22 @@ async function drawRealWaveform(clip, div){
 }
 
 function makeDraggable(element,clip){
+  let pointerId = null;
   let isDragging = false;
   let startX = 0;
   let originalLeft = 0;
 
-  element.addEventListener("mousedown",e=>{
+  element.addEventListener("pointerdown",e=>{
     if(
       e.target.tagName==="INPUT" ||
       e.target.tagName==="BUTTON" ||
       e.target.classList.contains("trim-handle")
     ) return;
+
+    e.preventDefault();
+
+    pointerId = e.pointerId;
+    element.setPointerCapture(pointerId);
 
     isDragging = true;
     isDraggingClip = true;
@@ -504,8 +517,10 @@ function makeDraggable(element,clip){
     originalLeft = parseFloat(element.style.left) || 0;
   });
 
-  window.addEventListener("mousemove",e=>{
-    if(!isDragging) return;
+  element.addEventListener("pointermove",e=>{
+    if(!isDragging || e.pointerId !== pointerId) return;
+
+    e.preventDefault();
 
     let newLeft = originalLeft + (e.clientX - startX);
     if(newLeft < 0) newLeft = 0;
@@ -516,13 +531,25 @@ function makeDraggable(element,clip){
       Math.round((newLeft / pixelsPerSecond) * 100) / 100;
   });
 
-  window.addEventListener("mouseup",()=>{
-    if(isDragging){
-      scheduleSave();
-    }
+  element.addEventListener("pointerup",e=>{
+    if(!isDragging || e.pointerId !== pointerId) return;
+
+    scheduleSave();
 
     isDragging = false;
     isDraggingClip = false;
+
+    try{
+      element.releasePointerCapture(pointerId);
+    }catch(err){}
+
+    pointerId = null;
+  });
+
+  element.addEventListener("pointercancel",()=>{
+    isDragging = false;
+    isDraggingClip = false;
+    pointerId = null;
   });
 }
 
@@ -530,6 +557,7 @@ function makeTrimHandles(element, clip){
   const left = element.querySelector(".trim-handle.left");
   const right = element.querySelector(".trim-handle.right");
 
+  let pointerId = null;
   let mode = null;
   let startX = 0;
   let originalLeft = 0;
@@ -541,6 +569,9 @@ function makeTrimHandles(element, clip){
     e.stopPropagation();
     e.preventDefault();
 
+    pointerId = e.pointerId;
+    e.target.setPointerCapture(pointerId);
+
     mode = resizeMode;
     isDraggingClip = true;
 
@@ -551,11 +582,10 @@ function makeTrimHandles(element, clip){
     originalTrimEnd = Number(clip.trimEnd || clip.duration || 0);
   }
 
-  left.onmousedown = e => startResize(e,"left");
-  right.onmousedown = e => startResize(e,"right");
+  function moveResize(e){
+    if(!mode || e.pointerId !== pointerId) return;
 
-  window.addEventListener("mousemove",e=>{
-    if(!mode) return;
+    e.preventDefault();
 
     const deltaPx = e.clientX - startX;
     const deltaSec = deltaPx / pixelsPerSecond;
@@ -605,14 +635,40 @@ function makeTrimHandles(element, clip){
     }
 
     drawRealWaveform(clip, element);
-  });
+  }
 
-  window.addEventListener("mouseup",()=>{
-    if(mode){
-      scheduleSave();
-    }
+  function endResize(e){
+    if(!mode || e.pointerId !== pointerId) return;
+
+    scheduleSave();
+
+    try{
+      e.target.releasePointerCapture(pointerId);
+    }catch(err){}
 
     mode = null;
+    pointerId = null;
+    isDraggingClip = false;
+  }
+
+  left.addEventListener("pointerdown",e=>startResize(e,"left"));
+  right.addEventListener("pointerdown",e=>startResize(e,"right"));
+
+  left.addEventListener("pointermove",moveResize);
+  right.addEventListener("pointermove",moveResize);
+
+  left.addEventListener("pointerup",endResize);
+  right.addEventListener("pointerup",endResize);
+
+  left.addEventListener("pointercancel",()=>{
+    mode = null;
+    pointerId = null;
+    isDraggingClip = false;
+  });
+
+  right.addEventListener("pointercancel",()=>{
+    mode = null;
+    pointerId = null;
     isDraggingClip = false;
   });
 }
